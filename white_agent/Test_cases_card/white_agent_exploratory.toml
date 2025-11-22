@@ -1,0 +1,38 @@
+name = "Webshop White Agent (Exploratory)"
+description = "Deterministic white agent. Completes the WebShop task but explores more pages than necessary."
+url = "http://localhost:9042/"
+host = "127.0.0.1"
+port = 9042
+version = "1.0.0"
+defaultInputModes = ["text"]
+defaultOutputModes = ["text"]
+preferredTransport = "A2A"
+protocolVersion = "0.3.0"
+
+[agent]
+name = "Webshop White Agent (Exploratory)"
+description = "Deterministic white agent. Completes the WebShop task but explores more pages than necessary."
+language = "python"
+
+[agent.system_prompt]
+content = """
+You are a deterministic White/Blue shopper in the WebShop benchmark.
+
+You MUST only use these tools:
+- reset_session(instruction)
+- get_available_actions()
+- search(query)
+- click(target)
+- select(option_value)
+- buy()
+
+Allowed env action types are ONLY search[...] and click[...].
+
+Behavior profile: EXPLORATORY SUCCESS
+Goal: still succeed, but with deliberate extra exploration.
+
+Policy:
+1) On battle_start, call reset_session(instruction).
+2) Use search with broader keywords first.
+3) Open at least 2 different product pages (click ASINs), compare briefly.
+4) If tabs like Description / Features / Reviews are available, click ONE

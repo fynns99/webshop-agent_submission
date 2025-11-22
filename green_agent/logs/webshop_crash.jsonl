@@ -1,0 +1,15 @@
+{"timestamp": "2025-11-12T16:14:22.220000", "battle_id": "webshop_crash", "event_type": "battle_started", "case": "crash"}
+{"timestamp": "2025-11-12T16:14:22.220050", "battle_id": "webshop_crash", "event_type": "action", "actor": "GREEN", "action": "load_catalog", "params": {}, "observation": {"count": 4, "ids": ["shoe-001", "shoe-002", "shoe-003", "shoe-004"]}, "ok": true}
+{"timestamp": "2025-11-12T16:14:22.220100", "battle_id": "webshop_crash", "event_type": "white_message", "kind": "goal", "message": "Goal: buy a blue running shoe under $100"}
+{"timestamp": "2025-11-12T16:14:22.220150", "battle_id": "webshop_crash", "event_type": "stage", "name": "Environment: load catalog"}
+{"timestamp": "2025-11-12T16:14:22.220200", "battle_id": "webshop_crash", "event_type": "white_message", "kind": "persona_reasoning", "message": "In this crash test, I will start normally, but something will go wrong before I can finish the task."}
+{"timestamp": "2025-11-12T16:14:22.220250", "battle_id": "webshop_crash", "event_type": "stage", "name": "Round 1"}
+{"timestamp": "2025-11-12T16:14:22.220300", "battle_id": "webshop_crash", "event_type": "white_message", "kind": "plan", "message": "I will search for 'blue shoes' and then inspect a promising product."}
+{"timestamp": "2025-11-12T16:14:22.220350", "battle_id": "webshop_crash", "event_type": "action", "actor": "BLUE", "action": "search", "params": {"query": "blue shoes"}, "observation": {"page": "results", "results": ["shoe-002", "shoe-004"], "available_actions": ["choose[item_title]", "choose[Next]", "choose[Prev]"], "page_index": 0}, "ok": true}
+{"timestamp": "2025-11-12T16:14:22.220400", "battle_id": "webshop_crash", "event_type": "white_message", "kind": "observation_reasoning", "message": "I see promising blue options here and would normally click into one of them next."}
+{"timestamp": "2025-11-12T16:14:22.220450", "battle_id": "webshop_crash", "event_type": "stage", "name": "Simulated crash during product page load"}
+{"timestamp": "2025-11-12T16:14:22.220500", "battle_id": "webshop_crash", "event_type": "white_message", "kind": "observation_reasoning", "message": "Something is wrong — I cannot continue interacting with the environment."}
+{"timestamp": "2025-11-12T16:14:22.220550", "battle_id": "webshop_crash", "event_type": "action", "actor": "SYSTEM", "action": "crash", "params": {}, "observation": {"page": "error", "message": "environment_unreachable"}, "ok": false}
+{"timestamp": "2025-11-12T16:14:22.220600", "battle_id": "webshop_crash", "event_type": "stage", "name": "Green Agent: evaluate trajectory"}
+{"timestamp": "2025-11-12T16:14:22.220650", "battle_id": "webshop_crash", "event_type": "metrics", "summary": {"success": false, "used_steps": 1, "metrics": {"completion": 0.0, "reward": 0.0, "efficiency": 0.2, "robustness": 0.3, "compliance": 1.0, "logging": 0.9, "stability": 0.0}, "composite_score": 0.233}}
+{"timestamp": "2025-11-12T16:14:22.220700", "battle_id": "webshop_crash", "event_type": "battle_finished", "success": false, "score": 0.233}

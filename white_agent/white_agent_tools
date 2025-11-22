@@ -1,0 +1,315 @@
+"""White/Blue Agent tools for the WebShop text benchmark.
+
+Exposes only deterministic shopper actions (reset, search, click/select, buy) plus the minimal A2A JSON‑RPC handshake.
+All tool outputs are strict Pydantic models.
+"""
+
+from __future__ import annotations
+
+import os, sys, json, time, pathlib, logging, importlib.util
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from pydantic import BaseModel, ConfigDict, Field
+from agentbeats import tool
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_WEBSHOP_REPO = pathlib.Path(
+    os.environ.get("WEBSHOP_REPO", "~/webshop")
+).expanduser().resolve()
+
+for p in (DEFAULT_WEBSHOP_REPO, DEFAULT_WEBSHOP_REPO / "baseline_models"):
+    if p.exists():
+        sp = str(p)
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+
+try:
+    from baseline_models.env import WebEnv as WebShopEnv  # type: ignore
+except Exception:
+    env_py = DEFAULT_WEBSHOP_REPO / "baseline_models" / "env.py"
+    if not env_py.exists():
+        raise ModuleNotFoundError(
+            f"WebShop env.py not found at {env_py}; set WEBSHOP_REPO correctly."
+        )
+    spec = importlib.util.spec_from_file_location("webshop_env", env_py)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+    WebShopEnv = getattr(mod, "WebShopEnv", None) or getattr(mod, "WebEnv", None)
+    if WebShopEnv is None:
+        raise ImportError(f"'WebShopEnv' not found in {env_py}")
+
+_env: Optional[WebShopEnv] = None
+_last_clickables: List[str] = []
+_last_has_search_bar: bool = False
+_last_obs: Optional[str] = None
+
+
+class EnvState(BaseModel):
+    observation: str
+    reward: float
+    done: bool
+    url: Optional[str] = None
+    has_search_bar: bool
+    clickables: List[str]
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResetResult(BaseModel):
+    ok: bool
+    instruction: str
+    state: EnvState
+    model_config = ConfigDict(extra="forbid")
+
+
+class AvailableActions(BaseModel):
+    has_search_bar: bool
+    clickables: List[str]
+    model_config = ConfigDict(extra="forbid")
+
+
+class ActionResult(BaseModel):
+    ok: bool
+    action: str
+    state: EnvState
+    model_config = ConfigDict(extra="forbid")
+
+
+class BattleInfoAck(BaseModel):
+    status: str
+    battle_id: str
+    agent_id: str
+    backend_url: str
+    model_config = ConfigDict(extra="forbid")
+
+
+
+class BattleStartAck(BaseModel):
+    status: str
+    battle_id: str
+    message: str
+    model_config = ConfigDict(extra="forbid")
+
+
+# Strict output model for message_stream
+class MessageStreamResult(BaseModel):
+    ok: bool
+    # We return the embedded JSON-RPC result as a JSON string to keep the tool schema strict.
+    result_json: Optional[str] = None
+    error: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+
+def _ensure_env() -> WebShopEnv:
+    global _env
+    if _env is None:
+        _env = WebShopEnv()
+    return _env
+
+def _refresh_available_actions(env: WebShopEnv) -> AvailableActions:
+    global _last_clickables, _last_has_search_bar
+    aa = env.get_available_actions()
+    _last_has_search_bar = bool(aa.get("has_search_bar", False))
+    _last_clickables = list(aa.get("clickables", []))
+    return AvailableActions(
+        has_search_bar=_last_has_search_bar,
+        clickables=_last_clickables
+    )
+
+def _extract_url(env: WebShopEnv) -> Optional[str]:
+    try:
+        st = getattr(env, "state", None)
+        if isinstance(st, dict):
+            return st.get("url")
+    except Exception:
+        pass
+    return None
+
+def _make_env_state(obs: str, reward: float, done: bool, env: WebShopEnv) -> EnvState:
+    aa = _refresh_available_actions(env)
+    return EnvState(
+        observation=obs,
+        reward=float(reward),
+        done=bool(done),
+        url=_extract_url(env),
+        has_search_bar=aa.has_search_bar,
+        clickables=aa.clickables
+    )
+
+def _validate_search(query: str):
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("search query must be a non-empty string")
+    if not _last_has_search_bar:
+        raise ValueError("search not allowed on this page (no search bar)")
+
+def _validate_click(target: str):
+    if not isinstance(target, str) or not target.strip():
+        raise ValueError("click target must be a non-empty string")
+    t = target.strip().lower()
+    allowed = [c.lower() for c in _last_clickables]
+    if t not in allowed:
+        raise ValueError(f"click target '{target}' not in current clickables")
+
+
+@tool
+def reset_session(instruction: str) -> ResetResult:
+    """Reset env with an instruction; return obs + available actions."""
+    env = _ensure_env()
+    obs = env.reset(instruction)
+    if isinstance(obs, tuple):
+        obs = obs[0]
+    global _last_obs
+    _last_obs = str(obs)
+    state = _make_env_state(str(obs), reward=0.0, done=False, env=env)
+    return ResetResult(ok=True, instruction=instruction, state=state)
+
+
+@tool
+def get_available_actions() -> AvailableActions:
+    """Return has_search_bar and current clickables."""
+    env = _ensure_env()
+    return _refresh_available_actions(env)
+
+
+@tool
+def search(query: str) -> ActionResult:
+    """Run search[query] if allowed."""
+    env = _ensure_env()
+    _validate_search(query)
+    action = f"search[{query.strip()}]"
+    obs, reward, done, _info = env.step(action)
+    global _last_obs
+    _last_obs = str(obs)
+    state = _make_env_state(str(obs), reward=float(reward), done=bool(done), env=env)
+    return ActionResult(ok=True, action=action, state=state)
+
+
+@tool
+def click(target: str) -> ActionResult:
+    """Run click[target] where target is in clickables."""
+    env = _ensure_env()
+    _validate_click(target)
+    t = target.strip().lower()
+    action = f"click[{t}]"
+    obs, reward, done, _info = env.step(action)
+    global _last_obs
+    _last_obs = str(obs)
+    state = _make_env_state(str(obs), reward=float(reward), done=bool(done), env=env)
+    return ActionResult(ok=True, action=action, state=state)
+
+
+@tool
+def select(option_value: str) -> ActionResult:
+    """Alias for click on an option value."""
+    return click(option_value)
+
+
+@tool
+def buy() -> ActionResult:
+    """Run click[Buy Now] when present."""
+    env = _ensure_env()
+    _validate_click("Buy Now")
+    action = "click[buy now]"
+    obs, reward, done, _info = env.step(action)
+    global _last_obs
+    _last_obs = str(obs)
+    state = _make_env_state(str(obs), reward=float(reward), done=bool(done), env=env)
+    return ActionResult(ok=True, action=action, state=state)
+
+
+@tool
+def battle_info(
+    type: str,
+    battle_id: str,
+    agent_name: str,
+    agent_id: str,
+    backend_url: str,
+) -> BattleInfoAck:
+    """A2A handshake: acknowledge battle_info."""
+    logger.debug(
+        "battle_info: type=%s battle_id=%s agent_name=%s agent_id=%s backend_url=%s",
+        type, battle_id, agent_name, agent_id, backend_url
+    )
+    return BattleInfoAck(
+        status="ok",
+        battle_id=battle_id,
+        agent_id=agent_id,
+        backend_url=backend_url
+    )
+
+
+@tool
+def battle_start(battle_id: str, instruction: Optional[str] = None) -> BattleStartAck:
+    """A2A handshake: acknowledge battle_start; optionally reset."""
+    logger.info("battle_start received for battle_id=%s", battle_id)
+    if instruction:
+        try:
+            reset_session(instruction)
+        except Exception as e:
+            logger.warning("reset_session failed on battle_start: %s", e)
+    return BattleStartAck(status="ok", battle_id=battle_id, message="white ready")
+
+
+
+
+@tool
+def message_stream(message: dict) -> MessageStreamResult:
+    """A2A message/stream handler for embedded JSON-RPC.
+
+    The A2A backend wraps JSON-RPC payloads inside message.parts[].text.
+    We extract that payload, dispatch to our strict tools, and return the
+    tool result as a JSON-encoded string (strict schema friendly).
+    """
+    try:
+        if isinstance(message, dict) and "parts" in message:
+            for part in message["parts"]:
+                if part.get("kind") == "text":
+                    text = part.get("text", "")
+                    if text.startswith("{") and '"jsonrpc"' in text:
+                        rpc_payload = json.loads(text)
+                        method = rpc_payload.get("method", "")
+                        params = rpc_payload.get("params", {}) or {}
+
+                        # Handshakes
+                        if method == "battle_info":
+                            res = battle_info(**params).model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+                        if method == "battle_start":
+                            bid = params.get("battle_id", "unknown")
+                            instr = params.get("instruction")
+                            res = battle_start(bid, instr).model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+
+                        # Shopper actions
+                        if method == "search":
+                            res = search(**params).model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+                        if method == "click":
+                            res = click(**params).model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+                        if method == "select":
+                            res = select(**params).model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+                        if method == "buy":
+                            res = buy().model_dump()
+                            return MessageStreamResult(ok=True, result_json=json.dumps(res))
+
+                        return MessageStreamResult(ok=False, error=f"Unknown method: {method}")
+
+        return MessageStreamResult(ok=False, error="No valid JSON-RPC found in message")
+    except Exception as e:
+        return MessageStreamResult(ok=False, error=f"Failed to parse/handle message: {str(e)}")
+
+
+__all__ = [
+    "reset_session",
+    "get_available_actions",
+    "search",
+    "click",
+    "select",
+    "buy",
+    "battle_info",
+    "battle_start",
+    "message_stream",
+]

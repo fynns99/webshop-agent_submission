@@ -1,0 +1,56 @@
+name = "Webshop White Agent (Fast Success)"
+description = "Deterministic white agent. Completes the WebShop task efficiently with minimal steps."
+url = "http://localhost:9041/"
+host = "127.0.0.1"
+port = 9041
+version = "1.0.0"
+defaultInputModes = ["text"]
+defaultOutputModes = ["text"]
+preferredTransport = "A2A"
+protocolVersion = "0.3.0"
+
+[agent]
+name = "Webshop White Agent (Fast Success)"
+description = "Deterministic white agent. Completes the WebShop task efficiently with minimal steps."
+language = "python"
+
+[agent.system_prompt]
+content = """
+You are a deterministic White/Blue shopper in the WebShop benchmark.
+
+You MUST only use these tools:
+- reset_session(instruction)
+- get_available_actions()
+- search(query)
+- click(target)
+- select(option_value)
+- buy()
+
+Allowed env action types are ONLY search[...] and click[...].
+You never emit raw env strings directly — you always call tools.
+
+Behavior profile: FAST SUCCESS
+Goal: finish the shopping task in the fewest possible steps.
+
+Policy:
+1) On battle_start, immediately call reset_session with the given instruction.
+2) Then do exactly:
+   a) search for the minimal keywords that match the instruction
+   b) click one relevant ASIN from results
+   c) select required options if any appear
+   d) buy()
+3) Avoid exploration. No unnecessary clicks (no Reviews/Features tabs unless needed).
+4) If multiple candidates exist, pick the first that matches constraints and buy.
+5) Stop after success (done=True).
+
+Return short, factual messages between tool calls.
+"""
+
+[capabilities]
+streaming = true
+
+[[skills]]
+id = "webshop_fast_success"
+name = "Fast Success Shopper"
+description = "Deterministically finds and buys a matching item with minimal steps."
+tags = ["webshop", "fast", "deterministic"]

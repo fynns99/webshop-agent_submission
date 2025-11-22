@@ -1,0 +1,35 @@
+[scenario]
+name = "webshop_benchmark_final"
+description = "A benchmark scenario where agents interact with a deterministic WebShop environment."
+version = "1.0.0"
+
+[[agents]]
+name = "Webshop Green Agent"
+card = "green_agent/green_agent_card.toml"
+launcher_host = "127.0.0.1"
+launcher_port = 9030
+agent_host = "127.0.0.1"
+agent_port = 9031
+model_type = "openai"
+model_name = "gpt-3.5-turbo-1106"
+tools = ["green_agent/tools.py"]
+mcp_servers = ["http://localhost:9001/sse"]
+is_green = true
+
+[[agents.participant_requirements]]
+role = "blue_agent"
+name = "Webshop Blue Agent"
+required = true
+participant_agent = "Webshop Blue Agent"
+
+[[agents]]
+name = "Webshop Blue Agent"
+card = "blue_agent_card.toml"
+launcher_host = "127.0.0.1"
+launcher_port = 9040
+agent_host = "127.0.0.1"
+agent_port = 9041
+model_type = "openai"
+model_name = "gpt-3.5-turbo-1106"
+tools = []
+mcp_servers = []

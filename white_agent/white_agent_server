@@ -1,0 +1,19 @@
+# white_agent/server.py
+import logging
+from agentbeats import AgentBeatsServer, load_tools_from_file
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("white-agent")
+
+def main():
+    # IMPORTANT: point to your tools file
+    tools = load_tools_from_file("white_agent_tools")  
+    server = AgentBeatsServer(
+        agent_name="Webshop White Agent",
+        tools=tools,
+    )
+    logger.info("Starting White Agent A2A server...")
+    server.run(host="127.0.0.1", port=9141)
+
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,3 @@
----
 # 1. Overview & Quickstart
 
 This submission implements the WebShop benchmark on AgentBeats with two agents:

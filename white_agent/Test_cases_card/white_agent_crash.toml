@@ -1,8 +1,8 @@
 name = "Webshop White Agent (Crash)"
 description = "Deterministic white agent. Mimics a crash/disconnection early in the episode."
-url = "http://localhost:9044/"
+url = "http://localhost:9051/"
 host = "127.0.0.1"
-port = 9044
+port = 9051
 version = "1.0.0"
 defaultInputModes = ["text"]
 defaultOutputModes = ["text"]

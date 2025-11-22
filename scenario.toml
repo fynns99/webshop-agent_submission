@@ -23,13 +23,13 @@ required = true
 participant_agent = "Webshop Blue Agent"
 
 [[agents]]
-name = "Webshop Blue Agent"
-card = "blue_agent_card.toml"
+name = "Webshop White Agent"
+card = "white_agent/Test_cases_card/white_agent_fast_success.toml"
 launcher_host = "127.0.0.1"
-launcher_port = 9040
+launcher_port = 9050
 agent_host = "127.0.0.1"
-agent_port = 9041
+agent_port = 9051
 model_type = "openai"
 model_name = "gpt-3.5-turbo-1106"
-tools = []
+tools = ["white_agent/white_agent_tools"]
 mcp_servers = []

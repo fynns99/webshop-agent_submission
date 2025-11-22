@@ -13,7 +13,7 @@ def main():
         tools=tools,
     )
     logger.info("Starting White Agent A2A server...")
-    server.run(host="127.0.0.1", port=9141)
+    server.run(host="127.0.0.1", port=9051)
 
 if __name__ == "__main__":
     main()

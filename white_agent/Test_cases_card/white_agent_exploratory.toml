@@ -1,8 +1,8 @@
 name = "Webshop White Agent (Exploratory)"
 description = "Deterministic white agent. Completes the WebShop task but explores more pages than necessary."
-url = "http://localhost:9042/"
+url = "http://localhost:9051/"
 host = "127.0.0.1"
-port = 9042
+port = 9051
 version = "1.0.0"
 defaultInputModes = ["text"]
 defaultOutputModes = ["text"]

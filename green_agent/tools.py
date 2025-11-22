@@ -1,10 +1,10 @@
 # scenarios/webshop_benchmark/green_agent/tools.py
 """
 Tools for the green agent in the webshop benchmark scenario.
-- Startet den WebShop aus separatem Repo (Flask) über run_dev.sh / run_prod.sh
-- Prüft Erreichbarkeit (kein /health vorhanden -> Root-HTML)
-- Liest Katalog/Goals aus data/
-- Optional: liest die jüngste User-Session-Logdatei
+- Starts the WebShop from a separate repo (Flask) via run_dev.sh / run_prod.sh
+- Probes reachability (no /health endpoint -> checks root HTML)
+- Loads catalog/goals from data/
+- Optionally reads the latest user-session log file
 """
 
 from __future__ import annotations
@@ -271,8 +271,8 @@ except Exception:
     if WebShopEnv is None:
         raise ImportError(f"'WebShopEnv' not found in {env_py}")
 
-# ► Lokales WebShop-Repo – bitte per WEBSHOP_REPO setzen (siehe Schritte unten)
-DEFAULT_WEBSHOP_REPO = pathlib.Path("/Users/fynnschafer/Pycharm/Agentic_AI/WebShop").expanduser().resolve()
+# Local WebShop repo – override via WEBSHOP_REPO if needed
+DEFAULT_WEBSHOP_REPO = pathlib.Path("/opt/webshop").expanduser().resolve()
 SCENARIO_ROOT = pathlib.Path(__file__).resolve().parent
 
 logger = logging.getLogger(__name__)
@@ -297,14 +297,14 @@ if DEFAULT_PRODUCTS_PATH:
 else:
     PRODUCTS_JSONL = (COLLECTIONS_DIR / "products.jsonl")
 
-# Standard-Port: laut Analyse läuft Flask auf 0.0.0.0:3000 (run_dev.sh → python -m web_agent_site.app --log --attrs)
+# Default port: Flask usually runs on 0.0.0.0:3000 (run_dev.sh → python -m web_agent_site.app --log --attrs)
 DEFAULT_PORT = int(os.environ.get("WEBSHOP_PORT", "3000"))
 
 _env: Optional[WebShopEnv] = None
 
 
 def start_environment(instruction: str = ""):
-    """Initialisiert das WebShop Environment und startet eine Episode."""
+    """Initialize the WebShop environment and start an episode."""
     global _env
     _env = WebShopEnv()
     obs = _env.reset(instruction)
@@ -312,7 +312,7 @@ def start_environment(instruction: str = ""):
 
 
 def reset_environment(instruction: str = ""):
-    """Reset für neue Episode."""
+    """Reset the environment for a new episode."""
     global _env
     if _env is None:
         _env = WebShopEnv()
@@ -328,8 +328,8 @@ def _repo_root() -> pathlib.Path:
 
 def _webshop_python() -> pathlib.Path:
     """
-    Bevorzugt explizit konfigurierten WebShop-Interpreter (z. B. Py3.10 venv).
-    Fällt ansonsten auf python3.10 im PATH oder sys.executable zurück.
+    Prefer an explicitly configured WebShop interpreter (e.g., Py3.10 venv).
+    Falls back to python3.10 in PATH or sys.executable.
     """
     candidates = [
         os.environ.get("WEBSHOP_PY"),
@@ -341,7 +341,7 @@ def _webshop_python() -> pathlib.Path:
             path = pathlib.Path(cand).expanduser().resolve()
             if path.exists():
                 return path
-    raise FileNotFoundError("Kein geeigneter Interpreter für WebShop gefunden (WEBSHOP_PY/python3.10/sys.executable).")
+    raise FileNotFoundError("No suitable interpreter for WebShop found (WEBSHOP_PY/python3.10/sys.executable).")
 
 
 def _run_async(
@@ -350,7 +350,7 @@ def _run_async(
     extra_env: Dict[str, str] | None = None,
     log_path: pathlib.Path | None = None,
 ) -> subprocess.Popen:
-    """Startet einen Hintergrundprozess und protokolliert optional nach log_path."""
+    """Start a background process and optionally tee output to log_path."""
     env = os.environ.copy()
     if extra_env:
         env.update({k: str(v) for k, v in extra_env.items()})
@@ -398,25 +398,25 @@ def _http_get(url: str, timeout: float = 2.0) -> Optional[bytes]:
         return None
 
 # -------------------------------
-# Public Tools für den Green Agent
+# Public tools for the Green Agent
 # -------------------------------
 
 @tool
 def setup_env(mode: str = "dev", port: int = DEFAULT_PORT) -> SetupResult:
     """
-    Startet den WebShop aus dem separaten Repo.
-    Erwartete Startskripte (laut Analyse): run_dev.sh, run_prod.sh
-    - dev:   python -m web_agent_site.app --log --attrs  (über run_dev.sh)
-    - prod:  python -m web_agent_site.app --log          (über run_prod.sh)
+    Start the WebShop from the separate repo.
+    Expected startup scripts: run_dev.sh, run_prod.sh
+    - dev:   python -m web_agent_site.app --log --attrs  (via run_dev.sh)
+    - prod:  python -m web_agent_site.app --log          (via run_prod.sh)
 
-    Rückgabe enthält Basis-Metadaten für nachgelagerte Schritte.
+    Returns basic metadata for downstream steps.
     """
     repo = _repo_root()
     if not repo.exists():
-        raise FileNotFoundError(f"[tools] WebShop-Repo nicht gefunden: {repo}")
+        raise FileNotFoundError(f"[tools] WebShop repo not found: {repo}")
 
-    # optionales Setup (falls vorhanden)
-    setup_sh = repo / "run_dev.sh"  # meist genügt dev
+    # Optional setup scripts if present
+    setup_sh = repo / "run_dev.sh"  # dev is usually sufficient
     prod_sh  = repo / "run_prod.sh"
 
     env = os.environ.copy()
@@ -706,20 +706,7 @@ def preview_products_jsonl(limit: int = 5) -> Dict[str, Any]:
 
 @tool
 def list_goals() -> GoalsResult:
-    """    source venv/bin/activate
-    
-    # Wechsel in scenario-Ordner (optional)
-    cd /Users/fynnschafer/Pycharm/Agentic_AI/agentbeats
-    
-    # Führe agent direkt aus (kein tmux/launcher) mit verbose logging:
-    agentbeats run_agent scenarios/webshop_benchmark/green_agent/green_agent_card.toml \
-      --agent_host 127.0.0.1 --agent_port 9031 \
-      --model_type openai --model_name gpt-3.5-turbo-1106 \
-      --tool scenarios/webshop_benchmark/green_agent/tools.py \
-      --mcp http://localhost:9001/sse --log-level debug
-    Lists possible goals files in the repo with graceful handling of missing files.
-    Checks both standard locations and environment-specified paths.
-    """
+    """List goal files with graceful handling of missing locations."""
     # Try environment variable first, then standard locations
     goals_dir = os.environ.get("WEBSHOP_GOALS")
     if goals_dir:
@@ -790,8 +777,8 @@ def list_goals() -> GoalsResult:
 @tool
 def read_latest_session_log() -> LogResult:
     """
-    Liest die jüngste Logdatei aus user_session_logs/ (wird bei --log vom WebShop erzeugt).
-    Falls noch keine existiert, liefert nur den Ordnerpfad zurück.
+    Read the newest log file from user_session_logs/ (written by WebShop when --log is enabled).
+    If none exist yet, returns only the folder path.
     """
     repo = _repo_root()
     base = repo / "user_session_logs"
@@ -802,7 +789,7 @@ def read_latest_session_log() -> LogResult:
         return LogResult(base=str(base), found=False)
     latest = logs[-1]
     try:
-        # Nur erste 3 Zeilen zeigen
+        # Show only the first 3 lines
         lines = latest.read_text(encoding="utf-8", errors="ignore").splitlines()[:3]
         return LogResult(
             base=str(base),
@@ -906,6 +893,216 @@ def report_on_battle_end(
         
     return report
 
+METRIC_WEIGHTS = {
+    "completion": 0.5,
+    "reward": 0.3,
+    "efficiency": 0.1,
+    "stability": 0.1,
+}
+
+
+def _clamp01(value: Any) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return 0.0
+
+
+@tool
+def score_metrics(
+    metrics: Dict[str, float],
+    used_steps: Optional[int] = None,
+    success: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """
+    Compute a composite WebShop score using the current weights:
+      0.5 * completion + 0.3 * reward + 0.1 * efficiency + 0.1 * stability.
+    Missing metrics default to 0.0 and all inputs are clamped to [0,1].
+    """
+    normalized = {name: _clamp01(metrics.get(name, 0.0)) for name in METRIC_WEIGHTS}
+    composite = sum(normalized[name] * weight for name, weight in METRIC_WEIGHTS.items())
+
+    result: Dict[str, Any] = {
+        "metrics": normalized,
+        "composite_score": composite,
+    }
+    if used_steps is not None:
+        result["used_steps"] = int(used_steps)
+    if success is not None:
+        result["success"] = bool(success)
+    return result
+
+
+def _derive_metrics_from_trajectory(trajectory: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Lightweight heuristic to derive metrics from a WebShop-like trajectory.
+    Keeps things defensive so it can run on partial or synthetic data.
+    """
+    steps = 0
+    success = False
+    reward_vals: List[float] = []
+    had_error = False
+
+    for event in trajectory:
+        if not isinstance(event, dict):
+            continue
+        action = event.get("action") or event.get("event")
+        actor = (event.get("actor") or "").lower()
+        if action or actor == "blue":
+            steps += 1
+
+        if isinstance(event.get("reward"), (int, float)):
+            reward_vals.append(float(event["reward"]))
+
+        obs = event.get("observation") or event.get("obs") or {}
+        if isinstance(obs, dict):
+            if obs.get("status") == "success" or obs.get("order_id"):
+                success = True
+            if obs.get("done") and obs.get("reward", 0) > 0:
+                success = True
+        info = event.get("info") or {}
+        if isinstance(info, dict) and info.get("goal_met"):
+            success = True
+
+        status = (event.get("status") or "").lower()
+        ok_flag = event.get("ok")
+        if status == "error" or ok_flag is False or event.get("error"):
+            had_error = True
+
+    reward_score = 0.0
+    if reward_vals:
+        reward_score = max(reward_vals)
+        reward_score = _clamp01(reward_score)
+    if not reward_vals and success:
+        reward_score = 1.0
+
+    efficiency = 1.0
+    if steps > 0:
+        if steps <= 4:
+            efficiency = 1.0
+        elif steps <= 6:
+            efficiency = 0.8
+        elif steps <= 10:
+            efficiency = 0.6
+        else:
+            efficiency = 0.4
+
+    stability = 0.0 if had_error else 1.0
+
+    metrics = {
+        "completion": 1.0 if success else 0.0,
+        "reward": reward_score,
+        "efficiency": efficiency,
+        "stability": stability,
+    }
+    return {"metrics": metrics, "used_steps": steps, "success": success}
+
+
+@tool
+def score_trajectory(trajectory: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Score a WebShop trajectory dict/list using the current weighted metrics.
+
+    The function is resilient to partial data:
+    - Detects success if any observation has status=success/order_id/done+reward>0.
+    - Derives steps from BLUE actions or any event with an action field.
+    - Uses max reward seen; defaults to 1.0 on success if no reward provided.
+    """
+    derived = _derive_metrics_from_trajectory(trajectory or [])
+    return score_metrics(
+        metrics=derived["metrics"],
+        used_steps=derived["used_steps"],
+        success=derived["success"],
+    )
+
+def _load_blue_trajectory(battle_id: str) -> Dict[str, Any]:
+    """
+    Try to load a persisted Blue trajectory for this battle_id from common locations.
+    Returns an empty structure if nothing is found.
+    """
+    candidates = [
+        SCENARIO_ROOT / "logs" / f"{battle_id}.jsonl",
+        SCENARIO_ROOT / "logs" / f"webshop_{battle_id}.jsonl",
+        SCENARIO_ROOT / "logs" / f"battle_{battle_id}.jsonl",
+        _repo_root() / "battle_logs" / f"battle_{battle_id}.jsonl",
+    ]
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            events = []
+            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    continue
+
+            summary_metrics: Dict[str, Any] = {}
+            success = None
+            used_steps = None
+            for ev in reversed(events):
+                if isinstance(ev, dict) and ev.get("event_type") == "metrics":
+                    summary = ev.get("summary") or {}
+                    if isinstance(summary, dict):
+                        summary_metrics = summary.get("metrics") or {}
+                        success = summary.get("success")
+                        used_steps = summary.get("used_steps")
+                    break
+
+            return {
+                "events": events,
+                "metrics": summary_metrics,
+                "success": success,
+                "used_steps": used_steps,
+                "source": str(path),
+            }
+        except Exception:
+            continue
+
+    # Fallback: pick the latest JSONL in known dirs if nothing matched battle_id
+    search_dirs = [
+        SCENARIO_ROOT / "logs",
+        _repo_root() / "battle_logs",
+    ]
+    latest_file: Optional[pathlib.Path] = None
+    latest_mtime = -1.0
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        for p in d.glob("*.jsonl"):
+            try:
+                mtime = p.stat().st_mtime
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+                    latest_file = p
+            except Exception:
+                continue
+    if latest_file:
+        try:
+            events = []
+            for line in latest_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    continue
+            return {
+                "events": events,
+                "metrics": {},
+                "success": None,
+                "used_steps": None,
+                "source": str(latest_file),
+            }
+        except Exception:
+            pass
+
+    return {"events": [], "metrics": {}, "source": None}
+
+
 @tool
 def battle_info(
     type: str,
@@ -937,15 +1134,22 @@ def battle_start(battle_id: str) -> Dict[str, Any]:
         results.append("health: " + str(health()))
         results.append("load_catalog: " + str(load_catalog()))
         
-        # Poll for blue trajectory (placeholder - implement based on actual Blue agent interaction)
-        traj = {"event_count": 0, "events": []}  # Placeholder
-        results.append("get_blue_trajectory: " + str(traj))
+        # Load blue trajectory from persisted log files (JSONL)
+        traj = _load_blue_trajectory(battle_id)
+        results.append("get_blue_trajectory: " + str({k: v for k, v in traj.items() if k != "events"}))
         
-        # Placeholder scoring - implement based on actual trajectory analysis
-        score_result = {"score": 0, "reasoning": "Placeholder - implement trajectory scoring"}
+        # Score using the configured metric weights (defaults to zeros if missing)
+        if traj.get("events"):
+            score_result = score_trajectory(traj["events"])
+        else:
+            score_result = score_metrics(
+                metrics=traj.get("metrics") or {},
+                used_steps=traj.get("used_steps"),
+                success=traj.get("success"),
+            )
         results.append("score_trajectory: " + str(score_result))
         
-        # Placeholder battle end report
+        # Finalize battle end report snapshot
         end_report = {"status": "completed", "battle_id": battle_id}
         results.append("report_on_battle_end: " + str(end_report))
         
@@ -995,7 +1199,7 @@ def message_stream(message: dict) -> dict:
         return {"error": f"Failed to parse message: {str(e)}"}
 
 
-# Export – AgentBeats lädt Funktionen als „Tools"
+# Export – AgentBeats loads these functions as tools
 __all__ = [
     # Web server / environment setup
     "setup_env",
@@ -1008,6 +1212,8 @@ __all__ = [
     # Battle logging & reports
     "update_battle_process",
     "report_on_battle_end",
+    "score_metrics",
+    "score_trajectory",
 
     # Gym-style WebShop environment helpers (internal)
     "start_environment",

@@ -70,7 +70,8 @@ Stability (S):
     0.0 = system or agent crash  
 
 Composite Score:
-    Score = 0.40*C + 0.20*R + 0.12*E + 0.10*B + 0.10*P + 0.04*L + 0.04*S
+    Score = 0.50*C + 0.30*R + 0.10*E + 0.10*S
+    Other metrics can be logged for diagnostics but do not influence the composite.
 
 Critical crash or policy violation:
     Composite score is clipped ≤ 0.1.

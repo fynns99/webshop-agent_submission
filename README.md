@@ -50,6 +50,10 @@ Attach to tmux to watch live logs:
 tmux attach -t agentbeats-webshop-benchmark
 ```
 
+Notes:
+- Set `WEBSHOP_REPO` to your local WebShop clone; fallback default is `/opt/webshop`.
+- Green ingests Blue trajectories from JSONL logs under `logs/` or `battle_logs/`; ensure those files are written during runs.
+
 ## 1.2 Ports used
 
 - Backend: **9000**
@@ -110,6 +114,7 @@ The Green Agent computes:
 - Policy compliance  
 - Logging quality  
 - Stability (crash detection)  
+- Composite score currently uses Completion/Reward/Efficiency/Stability; other metrics may be logged for diagnostics.
 
 It also produces:
 - A structured event log  

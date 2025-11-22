@@ -1,38 +1,155 @@
 ---
-## 2.3 How the WebShop Server Connects to AgentBeats
+# 1. Overview & Quickstart
 
-AgentBeats does not include the WebShop backend internally. Instead, the Blue Agent or White-Agent tools connect directly to the external WebShop server you start from the standalone WebShop repository.
+This submission implements the WebShop benchmark on AgentBeats with two agents:
+
+- **White Agents (shopping personas)**: autonomous shoppers that use a small deterministic tool server.
+- **Green Agent (referee)**: hosts the WebShop text environment, verifies actions, and scores trajectories.
+
+You can run the full benchmark in ~3 steps once the venv is active.
+
+## 1.1 Quickstart (run one battle)
+
+**Terminal 1 – Start AgentBeats backend**
+```bash
+cd <YOUR_AGENTBEATS_PATH>
+source venv/bin/activate
+export OPENAI_API_KEY="sk-proj-…"
+
+agentbeats run_backend \
+  --host 127.0.0.1 \
+  --backend_port 9000 \
+  --mcp_port 9001 \
+  --reload
+```
+
+**Terminal 2 – Load scenario (auto‑launch agents in tmux)**
+```bash
+cd <YOUR_AGENTBEATS_PATH>
+source venv/bin/activate
+export OPENAI_API_KEY="sk-proj-…"
+
+agentbeats load_scenario \
+  <YOUR_AGENTBEATS_PATH>/scenarios/webshop_benchmark_final \
+  --launch-mode tmux \
+  --register_agents \
+  --backend http://127.0.0.1:9000
+```
+
+**Terminal 3 – Run the scenario**
+```bash
+cd <YOUR_AGENTBEATS_PATH>
+source venv/bin/activate
+
+agentbeats run_scenario \
+  <YOUR_AGENTBEATS_PATH>/scenarios/webshop_benchmark_final \
+  --backend http://127.0.0.1:9000
+```
+
+Attach to tmux to watch live logs:
+```bash
+tmux attach -t agentbeats-webshop-benchmark
+```
+
+## 1.2 Ports used
+
+- Backend: **9000**
+- MCP: **9001**
+- Green Agent: **9031**
+- White Agent (current persona): **9051**
+
+---
+
+# 2.1 White Agent Architecture (Tools + Server)
+
+The White Agent in this benchmark is a **fully autonomous shopping agent**. It consists of two components:
+
+### **(1) A Tool Server (`white_agent_server.py`)**
+This is a small A2A-compatible HTTP server that exposes deterministic WebShop actions to the LLM.  
+It handles the following responsibilities:
+- Maintain a local session ID for the WebShop env
+- Forward action requests to the Green Agent or WebShop API
+- Enforce allowed action types (`search[…]`, `click[…]`)
+- Validate clickables and normalize input
+- Return clean JSON responses for the LLM agent
+
+The White Agent tool server exposes the following tool endpoints:
+- `search(query: str)`
+- `click(target: str)`
+- `select(option_value: str)`
+- `buy()`
+- `reset_session()`
+
+All requests are deterministic and validated, making the White Agent reproducible across runs.
+
+### **(2) An Agent Card (`white_agent_*.toml`)**
+Each persona (fast_success, exploratory, partial_failure, crash) uses:
+- the same server + tool definitions  
+- but different **system prompts** describing the behavior style
+
+This allows reproducible evaluation without modifying the tool code.
+
+---
+
+# 2.2 Green Agent Architecture (Environment Host + Judge)
+
+The Green Agent is the **referee** of the benchmark.  
+It consists of its own A2A server (`green_agent_server.py`) which:
+
+### **Environment Management**
+- Starts the WebShop text-based environment internally  
+- Loads the product catalog  
+- Resets the environment for each new episode  
+- Steps the environment using `step_env(action)`  
+- Verifies all claims made by the White Agent
+
+### **Judging & Scoring**
+The Green Agent computes:
+- Task completion score  
+- Reward score  
+- Efficiency / robustness  
+- Policy compliance  
+- Logging quality  
+- Stability (crash detection)  
+
+It also produces:
+- A structured event log  
+- A JSON final report with all metrics  
+
+The Green Agent never searches or shops itself—  
+it only **verifies**, **steps**, **logs**, and **scores**.
+
+---
+
+## 2.3 How the WebShop Environment Connects to AgentBeats
+
+AgentBeats does not ship a WebShop backend. In this submission the **Green Agent hosts the WebShop text environment internally** (Gym-style), so no separate WebShop server is required for the benchmark to run.
 
 ### How it works
 
-- The external WebShop repository exposes a REST API at  
-  `http://localhost:<WEBSHOP_PORT>/api/...`
-- Your **white agent tools** (in `white_agent_tools.py`) call this API directly.
-- Your **blue agent card** (if used) is configured with the same base URL.
-- The **Green Agent** evaluates the actions taken against this external server.
+- When a battle starts, the **Green Agent** calls `setup_env()` and loads the JSON catalog.
+- The **White Agent tool server** exposes only canonical WebShop actions (`search[…]`, `click[…]`, `select`, `buy`) to the LLM.
+- Each White action is forwarded to Green, and Green executes it via `step_env(action)`.
+- Green verifies legality (arg in clickables, Buy Now only on product page), logs the transition, and updates scores.
 
-### Required environment variable
+### Optional: external HTML WebShop server (only for UI/debug)
 
-Set the port where the external server runs:
+If you want to browse the catalog in a browser, you *may* start a standalone WebShop HTML server from the original WebShop repo. This is **not used for scoring**; it is purely for visualization.
 
+If you do this, set:
 ```bash
 export WEBSHOP_PORT=3000
 ```
-
-AgentBeats will use it to construct full WebShop URLs:
-
-```
-http://127.0.0.1:$WEBSHOP_PORT/api/query
-http://127.0.0.1:$WEBSHOP_PORT/api/open_item
-```
+so any helper scripts can link to:
+`http://127.0.0.1:$WEBSHOP_PORT`.
 
 ### Summary
 
-1. **Start the WebShop server** from the WebShop repository  
-2. **Export WEBSHOP_PORT**  
-3. **Start AgentBeats backend**  
-4. **Load and run the scenario**  
-5. The agents will automatically connect to the running WebShop instance
+1. **Start AgentBeats backend**
+2. **Load scenario (agents auto‑start)**
+3. **Run scenario**
+
+That’s enough for a full benchmark run.
 
 ---
 
@@ -91,7 +208,6 @@ agentbeats load_scenario <YOUR_AGENTBEATS_PATH>/scenarios/webshop_benchmark_fina
 ```
 
 This automatically launches:
-- Blue Agent  
 - Green Agent  
 - WebShop-White Agent (from persona card defined in `scenario.toml`)  
 
@@ -124,11 +240,10 @@ http://127.0.0.1:5173
 
 ```bash
 curl -s http://127.0.0.1:9031/.well-known/agent-card.json | jq .
-curl -s http://127.0.0.1:9041/.well-known/agent-card.json | jq .
 curl -s http://127.0.0.1:9051/.well-known/agent-card.json | jq .
 ```
 
-Each should return valid JSON.
+The White Agent runs on the port specified in the selected white_agent_*.toml (default in this repo: 9051).
 
 ---
 
@@ -146,10 +261,12 @@ agentbeats run_scenario \
 ```
 
 This executes:
-- White Agent → calls its own tool server → forwarded to Green Agent → Green Agent steps the WebShop environment internally  
-- Blue Agent → routes queries  
-- Green Agent → evaluates trajectory  
-- Scenario → aggregates final benchmark score  
+- White Agent → uses `white_agent_server.py` tools to emit canonical actions
+- White tool server → forwards actions to Green
+- Green Agent → steps the internal WebShop text env, verifies legality, logs + scores
+- Scenario → aggregates and prints the final benchmark score
+
+Note: The White Agent communicates directly with the Green Agent; there is no intermediary routing agent.
 
 ---
 
